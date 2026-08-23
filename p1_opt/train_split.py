@@ -107,6 +107,11 @@ def main() -> None:
         "RandomForest": RandomForestClassifier(n_estimators=400, random_state=RANDOM_STATE, n_jobs=-1),
         "HistGradientBoosting": HistGradientBoostingClassifier(random_state=RANDOM_STATE),
     }
+    # 先在验证集选择模型，测试集只用于最终一次性报告，避免测试集选择偏差。
+    cls_val_results = {}
+    for name, clf in classifiers.items():
+        cls_val_results[name] = evaluate_classifier(clf, X[idx_tr], y_metal[idx_tr],
+                                                    X[idx_va], y_metal[idx_va])
     cls_results = {}
     for name, clf in classifiers.items():
         cls_results[name] = evaluate_classifier(clf, X[idx_tr], y_metal[idx_tr],
@@ -123,6 +128,11 @@ def main() -> None:
         "RandomForest": RandomForestRegressor(n_estimators=400, random_state=RANDOM_STATE, n_jobs=-1),
         "HistGradientBoosting": HistGradientBoostingRegressor(random_state=RANDOM_STATE),
     }
+    nonmetal_va = idx_va[y_metal[idx_va] == 0]
+    reg_val_results = {}
+    for name, reg in regressors.items():
+        reg_val_results[name] = evaluate_regressor(reg, X[nonmetal_tr], y_gap[nonmetal_tr],
+                                                   X[nonmetal_va], y_gap[nonmetal_va])
     reg_results = {}
     for name, reg in regressors.items():
         reg_results[name] = evaluate_regressor(reg, X[nonmetal_tr], y_gap[nonmetal_tr],
@@ -142,8 +152,8 @@ def main() -> None:
     print(f"  说明：R²={full_r2:.3f} 主要来自识别 {zero_frac*100:.0f}% 的零带隙金属，而非预测带隙数值。")
 
     # ---- 选择最佳模型并打包 ----
-    best_clf_name = max(cls_results, key=lambda k: cls_results[k]["roc_auc"])
-    best_reg_name = min(reg_results, key=lambda k: reg_results[k]["mae"])
+    best_clf_name = max(cls_val_results, key=lambda k: cls_val_results[k]["roc_auc"])
+    best_reg_name = min(reg_val_results, key=lambda k: reg_val_results[k]["mae"])
     best_clf = classifiers[best_clf_name]
     best_reg = regressors[best_reg_name]
     # 用 train+val 重训最终模型
@@ -163,7 +173,9 @@ def main() -> None:
         "n_metal": n_metal,
         "n_nonmetal": n - n_metal,
         "classification": {"best_model": best_clf_name, **cls_results[best_clf_name]},
+        "classification_validation": cls_val_results,
         "regression_nonmetal": {"best_model": best_reg_name, **reg_results[best_reg_name]},
+        "regression_nonmetal_validation": reg_val_results,
         "regression_full_reference": {"mae": full_mae, "r2": full_r2},
         "mean_tree_std_uncertainty": reg_unc_std,
         "random_state": RANDOM_STATE,
