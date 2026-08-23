@@ -39,19 +39,22 @@ python p1_opt/predict.py LiFePO4  # 输出 P(金属) + 预测带隙 ± 不确定
 
 在 MatBench 官方数据集和 5 折划分上实测本项目基线（脚本 `benchmark/run_matbench_official.py`，结果见 `benchmark/matbench_results.json`）：
 
-| MatBench 任务 | 本项目（magpie+RF） | 官方 RF-SCM/Magpie | 官方 MODNet | 官方最强 |
+| MatBench 任务 | 本项目 | 官方 RF-SCM/Magpie | 官方 MODNet | 官方最强 |
 |---|---:|---:|---:|---:|
-| matbench_expt_gap（MAE↓） | **0.4459 ± 0.0182** | 0.4461 | 0.3327 | Darwin 0.2865 |
-| matbench_expt_is_metal（ROC-AUC↑） | **0.9721 ± 0.0024** | 0.9356 | 0.9739 | — |
+| expt_gap（MAE↓） | **0.4459 ± 0.0182** | 0.4461 | 0.3327 | Darwin 0.2865 |
+| expt_is_metal（ROC-AUC↑） | **0.9721 ± 0.0024** | 0.9356 | 0.9739 | — |
+| mp_gap（MAE↓，106k 结构，本项目用**组分基线**） | **0.3313 ± 0.0042** | 0.3452 | 0.2199（用结构） | coGN 0.1559（用结构） |
 
-两个值得说的结果：
+三个值得说的结果：
 1. **回归与官方 RF 基线一字不差**（0.4459 vs 0.4461）——验证了「magpie+RF 就是组分基线的水平上限」，也证明评估管线正确。
 2. **分类大幅超过官方 RF 基线**（0.972 vs 0.936），几乎追平 MODNet（0.974）——magpie 特征对「金属性判别」的分辨率远高于对「带隙数值」的分辨率。
+3. **mp_gap 上组分基线 0.331 超过官方 RF（0.345），距离用结构的 CGCNN（0.297）只差 0.034 eV**——结构信息的增量在中小规模下有限，这是 P2 结论的又一佐证。注：HGB 默认超参欠拟合（0.50），调参（max_iter=1000+早停）后到 0.33——超参很重要但一次网格就够了。
 
 ```bash
 pip install matbench
-python benchmark/run_matbench_official.py   # 官方 5 折，结果落盘
-python benchmark/run_matbench.py            # 同协议，支持更多任务
+python benchmark/run_matbench_official.py          # expt 任务，官方 5 折
+python benchmark/run_matbench_mp_gap.py --fold 0   # mp_gap，逐折跑（0-4）
+python benchmark/run_matbench.py                   # 同协议，支持更多任务
 ```
 
 ## CrabNet 基线（官方 5 折，已实测）
@@ -66,7 +69,16 @@ python benchmark/run_matbench.py            # 同协议，支持更多任务
 
 即：同为纯组分输入，CrabNet（即使缩减版）比 RF 好 11%，且自带预测不确定度（平均 ≈0.42 eV）。`run_crabnet.py` 内置 crabnet 1.0.1 与 torch≥2.x 的全部兼容补丁（包名 bug / 缺失数据文件 / 优化器 hook / DataLoader 死锁 / BLAS 死锁），可直接运行。
 
-**MODNet**（`pip install modnet`，需 tensorflow）为另一个值得加的组分基线（专为小数据设计，`mp_gap` 0.220），可在相同划分下按 `train_split.py` 的 `models` 字典模式接入。
+## MODNet 基线（P1 数据同划分，实测：诚实负结果）
+
+MODNet（MatBench 13 任务中 7 个第一的模型）在**本项目设定**下实测（脚本 `benchmark/run_modnet.py`，需 `pip install tensorflow-cpu tf_keras --no-deps modnet` + `TF_USE_LEGACY_KERAS=True`）：
+
+| 模型（同数据同划分） | 全量 MAE | 非金属子集 MAE |
+|---|---:|---:|
+| RF / HGB（本项目） | 0.337 / — | **0.522** |
+| MODNet（magpie 特征，n_feat=117，150ep） | 0.354 | 0.629 |
+
+**结论：在 6772 条小数据 + magpie 特征上，MODNet 不敌 RF/HGB**。这不是 MODNet 弱——它的优势（特征选择 + 深特征集）在 106k 数据 + 完整特征集才显现（官方 mp_gap 0.220）。这反而佐证了 P1 的判断：**这个数据规模下简单模型就是甜点位**。注意运行需要 `TF_USE_LEGACY_KERAS=1`（modnet 0.4.5 用旧版 keras optimizer API）。
 
 ## P2 v3：修正版 CGCNN（新增，GNN 首次稳定胜出 RF）
 
@@ -86,6 +98,27 @@ python benchmark/run_matbench.py            # 同协议，支持更多任务
 5. **图构建**：5Å 全邻居（平均 601 边/图）→ 每原子 12 最近邻（约 169 边，与原作一致，且训练提速 3.6 倍）。
 
 **结论**：GNN 之前「打平」不是数据量的全部原因——架构偏差也是。修正后 GNN 在小数据上也稳定胜出（0.574 vs 0.593），且「结构信息价值」的叙事现在有了正向证据。支持 checkpoint 断点续训与早停。
+
+## P3 v3：带稳定性判据的筛选闭环（新增，本地 demo）
+
+v2 的局限：只看预测带隙，「未检索到 MP」≈查字典。v3 对齐 MatBench-Discovery 范式的最小可行版本——**枚举 → 三级过滤 → 综合排序**，全部本地、无网络依赖：
+
+```
+240 个枚举化学式
+  → 金属性过滤（P1 分类器，P(金属) < 0.5）
+  → 带隙窗口（P1 回归器，1-3 eV ± 0.745 不确定度）
+  → 稳定性过滤（新训 is_stable 分类器，AUC 0.899，P(稳定) ≥ 0.5）
+  → 综合分排序（P(稳定) × 带隙窗口高斯权重）→ 57 个候选
+```
+
+稳定性模型（`p3_screen_v2/train_stability.py`）：用 MP 自带的 `is_stable` 标签（Ehull < 50 meV/atom）+ magpie 特征训练，5 折 CV AUC **0.899 ± 0.004**（HGB）。
+
+**诚实边界**：组分特征预测不了结构依赖的稳定性；候选含义是「模型认为可能是稳定半导体」，仍不含结构预测、形成能计算或实验可行性。但相比 v2 的「数据库里没有」，判据强度已质变。
+
+```bash
+python p3_screen_v2/train_stability.py   # 训练稳定性模型（~35s）
+python p3_screen_v2/screen_v3.py         # 筛选 demo（~5s，全本地）
+```
 
 ## 数据与 API 说明
 
@@ -148,7 +181,17 @@ python p2_gnn_v2/train_ckpt.py 40
 # P2：CIF 推理（需先用新版训练脚本生成带归一化统计量的权重）
 python p2_gnn_v2/predict_cif.py path/to/structure.cif
 
-# P3：候选筛选
+# MatBench mp_gap 组分基线（官方 5 折；首跑需下载 137MB 数据 + 4 分钟特征化，逐折可续跑）
+python benchmark/run_matbench_mp_gap.py --fold 0
+
+# MODNet 基线（需 TF_USE_LEGACY_KERAS=1）
+TF_USE_LEGACY_KERAS=1 python benchmark/run_modnet.py
+
+# P3 v3：稳定性模型 + 筛选闭环（全本地，~40 秒）
+python p3_screen_v2/train_stability.py
+python p3_screen_v2/screen_v3.py
+
+# P3：候选筛选（v2，对照保留）
 python p3_screen_v2/screen_v2.py
 ```
 
@@ -185,12 +228,20 @@ p2_gnn_v2/
 p3_screen_v2/
   screen_v2.py
   screening_results_v2.csv
+  train_stability.py     # v3：稳定性分类器（AUC 0.90）
+  screen_v3.py           # v3：三级过滤筛选闭环（本地 demo）
+  screening_results_v3.csv
+  stability_metrics.json
 benchmark/
   run_matbench.py            # MatBench 对标（通用版）
-  run_matbench_official.py   # MatBench 官方 5 折（结果落盘）
+  run_matbench_official.py   # MatBench 官方 5 折（expt 任务，结果落盘）
+  run_matbench_mp_gap.py     # MatBench mp_gap 组分基线（106k，逐折可续跑）
   run_crabnet.py             # CrabNet 基线（含 1.0.1 兼容补丁）
-  matbench_results.json      # 官方 5 折实测结果
-  crabnet_results.json       # CrabNet 5 折实测结果
+  run_modnet.py              # MODNet 基线（P1 数据同划分）
+  matbench_results.json      # expt 任务官方 5 折实测
+  matbench_mp_gap_results.json  # mp_gap 官方 5 折实测
+  crabnet_results.json       # CrabNet 5 折实测
+  modnet_results.json        # MODNet 实测
 tests/
   test_p1_split.py
 pyproject.toml
@@ -205,7 +256,8 @@ results_final.png
 - P2 的测试集只在最终评估时使用；checkpoint 依据 validation MAE 保存。
 - 当前数据中约 60% 样本带隙为 0，R² 需要结合金属/非金属分类指标和非零带隙子集误差解读。
 - CrabNet 结果为缩减版配置（d_model=128、40 epochs、无 SWA）的性能下限，不是官方完整版复现；官方完整版 5 折 0.346。
-- matbench_mp_gap / mp_is_metal（10.6 万结构）尚未在本仓库实测——数据量大，建议本地跑 `benchmark/run_matbench.py --task matbench_mp_gap`。
+- MODNet 结果是「本项目设定」（6772 条 + magpie 特征）下的诚实负结果；其官方榜单成绩（0.220）来自 106k 数据 + 完整特征集。
+- P3 v3 的稳定性判据仍是组分层面粗筛（AUC 0.90），不含结构预测与形成能计算。
 - P3 是候选化学式预筛，不包含晶体结构生成、形成能计算或实验可行性证明。
 
 ## GitHub 发布注意
