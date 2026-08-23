@@ -20,13 +20,15 @@
 
 P1 v2 的 R²=0.714 是「虚高」的：约 60% 样本带隙恰好为 0（金属），回归器只需「认出金属」就能拿到好看的数字。v3 把任务拆成两个更诚实、也更贴近 MatBench 官方定义的问题（实现见 `p1_opt/train_split.py`，指标见 `p1_opt/p1_split_metrics.json`）：
 
-| 任务 | 指标（test） | 说明 |
+| 任务 | 指标（5 折 CV，mean±std） | 说明 |
 |---|---:|---|
-| metal/non-metal 分类 | ROC-AUC **0.950**，准确率 0.889 | magpie 组分特征能否可靠判别金属性 |
-| 非金属子集带隙回归 | MAE **0.534** eV，R² 0.666 | 半导体/绝缘体的「真实」带隙预测难度 |
-| 全量带隙回归（参考） | MAE 0.337，R² 0.689 | R² 主要来自识别 60% 的零带隙金属 |
+| metal/non-metal 分类 | ROC-AUC **0.952 ± 0.006** | magpie 组分特征可靠判别金属性，且跨折稳定 |
+| 非金属子集带隙回归 | MAE **0.522 ± 0.012** eV（HGB 调参后） | 半导体/绝缘体的「真实」带隙预测难度 |
+| 全量带隙回归（参考） | MAE 0.337，R² 0.689（单次划分） | R² 主要来自识别 60% 的零带隙金属 |
 
 回归同时输出不确定度（随机森林树间标准差，均值 ≈0.745 eV），供 P3 筛选排序。
+
+**调参结论（诚实版）**：对 HGB 做网格搜索（`learning_rate`/`max_iter`/`max_leaf_nodes`），分类 ROC-AUC 0.9504→0.9514（≈无变化），回归 MAE 0.5332→0.5222（≈2%）。**调参收益很小——瓶颈是组分特征本身（无法捕捉结构决定的带隙），不是模型超参**。要实质提升，方向是结构 GNN（P2）或更多数据，而非在 RF/HGB 上调参。严格评估脚本见 `p1_opt/evaluate_cv.py`。
 
 ```bash
 python p1_opt/train_split.py      # 训练 → bandgap_split.joblib + p1_split_metrics.json
@@ -90,6 +92,9 @@ python p1_opt/train_magpie.py
 # P1 v3：金属/半导体分类 + 带隙回归拆分（推荐）
 python p1_opt/train_split.py
 
+# P1 v3：5 折交叉验证 + 调参（评审前必跑，得到 mean±std）
+python p1_opt/evaluate_cv.py
+
 # P1：化学式推理 Demo
 python p1_opt/predict.py LiFePO4
 
@@ -127,7 +132,9 @@ p1_opt/
   materials_final.csv
   train_magpie.py
   train_split.py          # v3：分类 + 回归拆分 + 不确定度
-  p1_split_metrics.json   # v3 指标
+  evaluate_cv.py          # v3：5 折交叉验证 + 调参
+  p1_split_metrics.json   # v3 指标（单次划分）
+  p1_cv_metrics.json      # v3 指标（5 折 CV mean±std）
   predict.py
   bandgap_magpie.joblib
 p2_gnn_v2/
