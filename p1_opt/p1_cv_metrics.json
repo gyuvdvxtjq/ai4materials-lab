@@ -1,0 +1,49 @@
+{
+  "protocol": "5-fold stratified CV, shuffle, random_state=42",
+  "random_state": 42,
+  "n_folds": 5,
+  "classification": {
+    "cv": {
+      "RandomForest(默认)": {
+        "mean": 0.9518460554764051,
+        "std": 0.006236719654278552
+      },
+      "HistGradientBoosting(默认)": {
+        "mean": 0.9504106770447548,
+        "std": 0.0056486345242019636
+      },
+      "HistGradientBoosting(调参后)": {
+        "mean": 0.9514038112353689,
+        "std": 0.005925054384901816
+      }
+    },
+    "best_hgb_params": {
+      "learning_rate": 0.05,
+      "max_iter": 200,
+      "max_leaf_nodes": 31
+    },
+    "best_hgb_cv_roc_auc": 0.9233461996856217
+  },
+  "regression_nonmetal": {
+    "cv": {
+      "RandomForest(默认)": {
+        "mean": 0.5438014718322256,
+        "std": 0.020157967762017573
+      },
+      "HistGradientBoosting(默认)": {
+        "mean": 0.533150650307576,
+        "std": 0.015537611066695314
+      },
+      "HistGradientBoosting(调参后)": {
+        "mean": 0.5222470562328947,
+        "std": 0.012375068730048304
+      }
+    },
+    "best_hgb_params": {
+      "learning_rate": 0.1,
+      "max_iter": 200,
+      "max_leaf_nodes": 31
+    },
+    "best_hgb_cv_mae": 0.6501751469164052
+  }
+}

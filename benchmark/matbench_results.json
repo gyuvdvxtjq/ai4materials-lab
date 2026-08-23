@@ -1,0 +1,41 @@
+{
+  "matbench_expt_gap": {
+    "model": "magpie + RandomForest(200 trees)",
+    "metric": "mae",
+    "mean": 0.44593805581289353,
+    "std": 0.01820520638112312,
+    "folds": [
+      0.4374004407734865,
+      0.4387454345690502,
+      0.4816726511038726,
+      0.4306692580528412,
+      0.4412024945652174
+    ],
+    "n_samples": 4604,
+    "leaderboard_reference": {
+      "RF-SCM/Magpie (官方)": 0.4461,
+      "AMMExpress v2020 (官方)": 0.4161,
+      "MODNet v0.1.12 (官方)": 0.3327,
+      "Darwin (官方)": 0.2865
+    }
+  },
+  "matbench_expt_is_metal": {
+    "model": "magpie + RandomForest(200 trees)",
+    "metric": "roc_auc",
+    "mean": 0.9721280411700451,
+    "std": 0.002410938342771459,
+    "folds": [
+      0.9745582427005945,
+      0.9708791208791209,
+      0.9706415764686441,
+      0.9753903990746096,
+      0.9691708667272576
+    ],
+    "n_samples": 4921,
+    "leaderboard_reference": {
+      "RF-SCM/Magpie (官方)": 0.9356,
+      "AMMExpress v2020 (官方)": 0.9471,
+      "MODNet v0.1.12 (官方)": 0.9739
+    }
+  }
+}

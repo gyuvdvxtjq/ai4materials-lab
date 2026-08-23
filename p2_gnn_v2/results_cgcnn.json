@@ -1,0 +1,16 @@
+{
+  "rf_mae": 0.5933976708023159,
+  "rf_r2": 0.2613430970957018,
+  "gnn_mae": 0.574074387550354,
+  "gnn_r2": 0.12041157484054565,
+  "n": 2012,
+  "arch": "cgcnn-fixed",
+  "upgrades": [
+    "one-hot embedding",
+    "BatchNorm",
+    "softplus",
+    "sum pooling"
+  ],
+  "best_epoch": 40,
+  "reference_old_gnn": 0.594
+}

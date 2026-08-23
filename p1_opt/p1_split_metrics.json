@@ -1,0 +1,25 @@
+{
+  "n_total": 6772,
+  "n_metal": 4091,
+  "n_nonmetal": 2681,
+  "classification": {
+    "best_model": "RandomForest",
+    "accuracy": 0.888560885608856,
+    "roc_auc": 0.9497521549760355,
+    "f1": 0.9054477144646212
+  },
+  "regression_nonmetal": {
+    "best_model": "HistGradientBoosting",
+    "mae": 0.5337900661360925,
+    "rmse": 0.7762568896490911,
+    "r2": 0.665939735665869,
+    "const_mae": 1.0148094290526153
+  },
+  "regression_full_reference": {
+    "mae": 0.3372988326418078,
+    "r2": 0.6886940939498073
+  },
+  "mean_tree_std_uncertainty": 0.7449589341613295,
+  "random_state": 42,
+  "featurizer": "magpie"
+}

@@ -7,3 +7,12 @@ ckpt.pt
 rf_baseline.json
 p2_gnn_v2/ckpt.pt
 p2_gnn_v2/rf_baseline.json
+# P1 v3 生成的大模型（由 train_split.py 重新生成；*.joblib 走 LFS，未装 LFS 时不要提交）
+p1_opt/bandgap_split.joblib
+# P2 v3 运行时产物（checkpoint / 图缓存，由 train_cgcnn.py 重新生成）
+p2_gnn_v2/ckpt_cgcnn.pt
+p2_gnn_v2/graphs_cache.pt
+# P3 v3 运行时产物
+p3_screen_v2/stability.joblib
+# MatBench mp_gap 缓存（137MB 数据 + 特征，运行时重新生成）
+benchmark/_cache/

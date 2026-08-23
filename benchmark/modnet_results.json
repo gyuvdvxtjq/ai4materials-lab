@@ -1,0 +1,20 @@
+{
+  "model": "MODNet (num_neurons=[[256],[128],[64],[32]], n_feat=200, 150 epochs)",
+  "protocol": "与 train_split.py 同划分（分层 80/10/10, random_state=42）",
+  "n": 6772,
+  "mae_full": 0.3539282953762392,
+  "r2_full": 0.605434395515304,
+  "mae_nonmetal": 0.6285785520424593,
+  "reference": {
+    "RF 全量（train_split.py, 同划分）": {
+      "mae": 0.337,
+      "r2": 0.689
+    },
+    "HGB 非金属子集（evaluate_cv.py, 5折）": {
+      "mae_mean": 0.522,
+      "std": 0.012
+    },
+    "官方 MODNet matbench_mp_gap (5折)": 0.2199
+  },
+  "seconds_total": 199
+}
