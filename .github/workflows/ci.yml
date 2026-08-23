@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-p1:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pandas scikit-learn pymatgen joblib pytest tqdm
+          # matminer 的依赖解析偶发触发 scikit-learn 源码重编译，--no-deps 规避
+          pip install --no-deps matminer
+      - name: Compile check
+        run: python -m compileall -q p1_opt p2_gnn_v2 p3_screen_v2 benchmark
+      - name: Run tests
+        run: python -m pytest -q
