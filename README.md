@@ -35,28 +35,57 @@ python p1_opt/train_split.py      # 训练 → bandgap_split.joblib + p1_split_m
 python p1_opt/predict.py LiFePO4  # 输出 P(金属) + 预测带隙 ± 不确定度 + 类别
 ```
 
-## MatBench 对标
+## MatBench 对标（官方数据 + 官方 5 折划分，已实测）
 
-指标若要「可比较」，应在 MatBench 官方数据集/划分上评估（脚本 `benchmark/run_matbench.py`）：
+在 MatBench 官方数据集和 5 折划分上实测本项目基线（脚本 `benchmark/run_matbench_official.py`，结果见 `benchmark/matbench_results.json`）：
 
-| MatBench 任务 | 本项目基线（magpie+RF） | 官方 RF-SCM/Magpie | 更强参考 |
-|---|---:|---:|---|
-| matbench_mp_gap（结构→DFT 带隙） | 待跑 | 0.345 | MODNet 0.220 / CGCNN 0.297 / ALIGNN 0.186 |
-| matbench_expt_gap（组分→实验带隙） | 待跑 | 0.446 | MODNet 0.333 / Darwin 0.287 |
+| MatBench 任务 | 本项目（magpie+RF） | 官方 RF-SCM/Magpie | 官方 MODNet | 官方最强 |
+|---|---:|---:|---:|---:|
+| matbench_expt_gap（MAE↓） | **0.4459 ± 0.0182** | 0.4461 | 0.3327 | Darwin 0.2865 |
+| matbench_expt_is_metal（ROC-AUC↑） | **0.9721 ± 0.0024** | 0.9356 | 0.9739 | — |
+
+两个值得说的结果：
+1. **回归与官方 RF 基线一字不差**（0.4459 vs 0.4461）——验证了「magpie+RF 就是组分基线的水平上限」，也证明评估管线正确。
+2. **分类大幅超过官方 RF 基线**（0.972 vs 0.936），几乎追平 MODNet（0.974）——magpie 特征对「金属性判别」的分辨率远高于对「带隙数值」的分辨率。
 
 ```bash
 pip install matbench
-python benchmark/run_matbench.py
+python benchmark/run_matbench_official.py   # 官方 5 折，结果落盘
+python benchmark/run_matbench.py            # 同协议，支持更多任务
 ```
 
-## 更强的组分基线（MODNet / CrabNet）
+## CrabNet 基线（官方 5 折，已实测）
 
-当前 P1 用 RF/HGB，是 MatBench 上较弱的组分基线。若要更进一步，可加两个「纯组分、更强」的模型：
+给纯组分路线补一个更强的模型：CrabNet（组分编码 + 注意力）。缩减版配置（d_model=128、40 epochs、无 SWA），是 CrabNet 的**性能下限**而非官方复现（脚本 `benchmark/run_crabnet.py`，结果见 `benchmark/crabnet_results.json`）：
 
-- **MODNet**（`pip install modnet`，需 tensorflow）：专为**小数据**设计，含特征选择 + 多任务学习，`mp_gap` 0.220，正好匹配本项目 6.7k 条的规模。
-- **CrabNet**（`pip install crabnet`，需 torch）：组分编码 + 注意力，`mp_gap` 0.266。
+| 模型 | matbench_expt_gap MAE（5 折） |
+|---|---:|
+| magpie + RF（本项目） | 0.4459 ± 0.0182 |
+| **CrabNet（缩减版，本项目实测）** | **0.3953 ± 0.0118** |
+| CrabNet（官方完整版参考） | 0.3463 |
 
-二者都能直接以 `Composition` 为输入，可作为 `train_split.py` 中 `models` 字典的额外条目，在相同 train/val/test 划分下对比。
+即：同为纯组分输入，CrabNet（即使缩减版）比 RF 好 11%，且自带预测不确定度（平均 ≈0.42 eV）。`run_crabnet.py` 内置 crabnet 1.0.1 与 torch≥2.x 的全部兼容补丁（包名 bug / 缺失数据文件 / 优化器 hook / DataLoader 死锁 / BLAS 死锁），可直接运行。
+
+**MODNet**（`pip install modnet`，需 tensorflow）为另一个值得加的组分基线（专为小数据设计，`mp_gap` 0.220），可在相同划分下按 `train_split.py` 的 `models` 字典模式接入。
+
+## P2 v3：修正版 CGCNN（新增，GNN 首次稳定胜出 RF）
+
+旧版 GNN（`train_distaware.py`）与 RF 打平（0.594 vs 0.591）。逐项对齐 CGCNN 原作后（`p2_gnn_v2/train_cgcnn.py`，结果见 `p2_gnn_v2/results_cgcnn.json`），同样 2012 结构、同划分：
+
+| 模型 | MAE |
+|---|---:|
+| RF 组分基线 | 0.593 |
+| 旧版 GNN（ReLU/无BN/标量特征/mean-pool/全邻居） | 0.594 |
+| **修正版 CGCNN（one-hot嵌入/BatchNorm/softplus/sum-pool/12近邻）** | **0.574** |
+
+架构修正清单（每项都是对 CGCNN 原作的偏离）：
+1. **原子特征**：7 个标量属性 → 可学习 one-hot 元素嵌入（元素身份是信息量最大的特征）；
+2. **归一化**：无 → 每层卷积后 BatchNorm1d；
+3. **激活**：ReLU → softplus（原作做法）；
+4. **池化**：mean → sum pooling（原作做法）；
+5. **图构建**：5Å 全邻居（平均 601 边/图）→ 每原子 12 最近邻（约 169 边，与原作一致，且训练提速 3.6 倍）。
+
+**结论**：GNN 之前「打平」不是数据量的全部原因——架构偏差也是。修正后 GNN 在小数据上也稳定胜出（0.574 vs 0.593），且「结构信息价值」的叙事现在有了正向证据。支持 checkpoint 断点续训与早停。
 
 ## 数据与 API 说明
 
@@ -101,8 +130,17 @@ python p1_opt/predict.py LiFePO4
 # MatBench 标准对标（可选，需 matbench 包 + 联网）
 python benchmark/run_matbench.py
 
+# MatBench 官方 5 折对标（结果落盘 benchmark/matbench_results.json）
+python benchmark/run_matbench_official.py
+
+# CrabNet 基线（官方 5 折；单折约 3-4 分钟 CPU，逐折落盘可断点续跑）
+python benchmark/run_crabnet.py --folds 0 1 2 3 4
+
 # P2：完整训练（数据量较大，CPU 可能耗时较久）
 python p2_gnn_v2/train_distaware.py
+
+# P2 v3：修正版 CGCNN（推荐；支持断点续训，再次运行接着 ckpt_cgcnn.pt 继续）
+python p2_gnn_v2/train_cgcnn.py 250
 
 # P2：资源有限时分段训练，每次接着 ckpt.pt 继续
 python p2_gnn_v2/train_ckpt.py 40
@@ -140,13 +178,19 @@ p1_opt/
 p2_gnn_v2/
   dataset.json
   train_distaware.py
+  train_cgcnn.py         # v3：修正版 CGCNN（对齐原作）
+  results_cgcnn.json     # v3 结果
   train_ckpt.py
   predict_cif.py
 p3_screen_v2/
   screen_v2.py
   screening_results_v2.csv
 benchmark/
-  run_matbench.py         # MatBench 标准对标
+  run_matbench.py            # MatBench 对标（通用版）
+  run_matbench_official.py   # MatBench 官方 5 折（结果落盘）
+  run_crabnet.py             # CrabNet 基线（含 1.0.1 兼容补丁）
+  matbench_results.json      # 官方 5 折实测结果
+  crabnet_results.json       # CrabNet 5 折实测结果
 tests/
   test_p1_split.py
 pyproject.toml
@@ -157,9 +201,11 @@ results_final.png
 ## 方法与限制
 
 - P1 在化学式归一化后去重，再进行分层随机划分，避免同一成分的多晶型泄漏。
-- P2 使用 `Structure.get_all_neighbors` 处理周期性邻居，并用高斯距离展开构造边特征。
+- P2 旧版使用 `Structure.get_all_neighbors`（5Å 全邻居）+ 高斯距离展开；v3 修正版改为每原子 12 最近邻，与 CGCNN 原作一致。
 - P2 的测试集只在最终评估时使用；checkpoint 依据 validation MAE 保存。
 - 当前数据中约 60% 样本带隙为 0，R² 需要结合金属/非金属分类指标和非零带隙子集误差解读。
+- CrabNet 结果为缩减版配置（d_model=128、40 epochs、无 SWA）的性能下限，不是官方完整版复现；官方完整版 5 折 0.346。
+- matbench_mp_gap / mp_is_metal（10.6 万结构）尚未在本仓库实测——数据量大，建议本地跑 `benchmark/run_matbench.py --task matbench_mp_gap`。
 - P3 是候选化学式预筛，不包含晶体结构生成、形成能计算或实验可行性证明。
 
 ## GitHub 发布注意

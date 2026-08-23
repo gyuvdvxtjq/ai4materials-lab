@@ -1,0 +1,53 @@
+{
+  "folds": {
+    "0": {
+      "fold": 0,
+      "mae": 0.3842,
+      "mean_uncertainty": 0.389,
+      "seconds": 218,
+      "epochs": 40,
+      "d_model": 128
+    },
+    "1": {
+      "fold": 1,
+      "mae": 0.39286107425936917,
+      "mean_uncertainty": 0.4219354593005925,
+      "seconds": 212,
+      "epochs": 40,
+      "d_model": 128
+    },
+    "2": {
+      "fold": 2,
+      "mae": 0.41394277146727204,
+      "mean_uncertainty": 0.46925883197825274,
+      "seconds": 211,
+      "epochs": 40,
+      "d_model": 128
+    },
+    "3": {
+      "fold": 3,
+      "mae": 0.40485432074202,
+      "mean_uncertainty": 0.408604148206029,
+      "seconds": 210,
+      "epochs": 40,
+      "d_model": 128
+    },
+    "4": {
+      "fold": 4,
+      "mae": 0.3805216723972041,
+      "mean_uncertainty": 0.41268133529178475,
+      "seconds": 207,
+      "epochs": 40,
+      "d_model": 128
+    }
+  },
+  "n_done": 5,
+  "mean": 0.3952759677731731,
+  "std": 0.012541071808952906,
+  "reference": {
+    "本项目 magpie+RF (官方5折)": 0.4459,
+    "官方 CrabNet (完整版, 5折)": 0.3463,
+    "官方 RF-SCM/Magpie (5折)": 0.4461
+  },
+  "note": "缩减版配置(d_model=128, 40ep, 无SWA)，是 CrabNet 的性能下限，非官方复现；官方完整版见 leaderboard。"
+}
