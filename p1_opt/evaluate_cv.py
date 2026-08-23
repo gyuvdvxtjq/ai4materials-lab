@@ -52,6 +52,30 @@ def cv_scores(estimator, X, y, groups, is_clf):
     return np.array(scores)
 
 
+def nested_tuned_scores(estimator, param_grid, X, y, groups, is_clf):
+    """嵌套 CV：外层评估，内层只在训练折上调参，避免调参泄漏。"""
+    outer = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE)
+    scores, params = [], []
+    for tr, te in outer.split(X, groups):
+        inner = GridSearchCV(estimator, param_grid,
+                             scoring="roc_auc" if is_clf else "neg_mean_absolute_error",
+                             cv=3, n_jobs=-1)
+        inner.fit(X[tr], y[tr])
+        best = inner.best_estimator_
+        if is_clf:
+            score = roc_auc_score(y[te], best.predict_proba(X[te])[:, 1])
+        else:
+            score = mean_absolute_error(y[te], best.predict(X[te]))
+        scores.append(score)
+        params.append(inner.best_params_)
+    # 仅用于部署时获取全量数据上的最终参数；不参与外层分数计算。
+    final = GridSearchCV(estimator, param_grid,
+                         scoring="roc_auc" if is_clf else "neg_mean_absolute_error",
+                         cv=3, n_jobs=-1)
+    final.fit(X, y)
+    return np.asarray(scores), final.best_params_, params
+
+
 def main() -> None:
     df, X, y_metal, y_gap = load_and_featurize()
     n = len(df)
@@ -75,16 +99,15 @@ def main() -> None:
 
     # 调参：HGB 分类
     clf_grid = {"learning_rate": [0.05, 0.1, 0.2], "max_iter": [100, 200], "max_leaf_nodes": [31, 63]}
-    gs = GridSearchCV(HistGradientBoostingClassifier(random_state=RANDOM_STATE), clf_grid,
-                      scoring="roc_auc", cv=3, n_jobs=-1)
-    gs.fit(X, y_metal)
-    best_clf = gs.best_estimator_
-    s = cv_scores(best_clf, X, y_metal, y_metal, is_clf=True)
+    s, best_params, fold_params = nested_tuned_scores(
+        HistGradientBoostingClassifier(random_state=RANDOM_STATE), clf_grid,
+        X, y_metal, y_metal, is_clf=True)
     cls_cv["HistGradientBoosting(调参后)"] = {"mean": float(s.mean()), "std": float(s.std())}
-    results["classification"] = {"cv": cls_cv, "best_hgb_params": gs.best_params_,
-                                 "best_hgb_cv_roc_auc": float(gs.best_score_)}
+    results["classification"] = {"cv": cls_cv, "best_hgb_params": best_params,
+                                 "outer_cv_roc_auc": float(s.mean()),
+                                 "outer_fold_params": fold_params}
     print(f"  {'HistGradientBoosting(调参后)':28s} {s.mean():.4f} ± {s.std():.4f}")
-    print(f"  最优超参: {gs.best_params_}  (3折内层CV ROC-AUC={gs.best_score_:.4f})\n")
+    print(f"  最优超参（全量部署）: {best_params}  （外层5折无偏评估）\n")
 
     # ---------- 任务 2：非金属子集带隙回归 ----------
     print("===== 任务 2：非金属子集 band_gap 回归（MAE, mean±std）=====")
@@ -104,16 +127,15 @@ def main() -> None:
 
     # 调参：HGB 回归
     reg_grid = {"learning_rate": [0.05, 0.1, 0.2], "max_iter": [100, 200], "max_leaf_nodes": [31, 63]}
-    gs = GridSearchCV(HistGradientBoostingRegressor(random_state=RANDOM_STATE), reg_grid,
-                      scoring="neg_mean_absolute_error", cv=3, n_jobs=-1)
-    gs.fit(Xnm, ynm)
-    best_reg = gs.best_estimator_
-    s = cv_scores(best_reg, Xnm, ynm, gap_bins, is_clf=False)
+    s, best_params, fold_params = nested_tuned_scores(
+        HistGradientBoostingRegressor(random_state=RANDOM_STATE), reg_grid,
+        Xnm, ynm, gap_bins, is_clf=False)
     reg_cv["HistGradientBoosting(调参后)"] = {"mean": float(s.mean()), "std": float(s.std())}
-    results["regression_nonmetal"] = {"cv": reg_cv, "best_hgb_params": gs.best_params_,
-                                      "best_hgb_cv_mae": float(-gs.best_score_)}
+    results["regression_nonmetal"] = {"cv": reg_cv, "best_hgb_params": best_params,
+                                      "outer_cv_mae": float(s.mean()),
+                                      "outer_fold_params": fold_params}
     print(f"  {'HistGradientBoosting(调参后)':28s} {s.mean():.4f} ± {s.std():.4f} eV")
-    print(f"  最优超参: {gs.best_params_}  (3折内层CV MAE={-gs.best_score_:.4f} eV)")
+    print(f"  最优超参（全量部署）: {best_params}  （外层5折无偏评估）")
 
     (P1_DIR / "p1_cv_metrics.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\nsaved {P1_DIR / 'p1_cv_metrics.json'}")
