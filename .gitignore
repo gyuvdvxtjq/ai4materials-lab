@@ -1,4 +1,5 @@
 __pycache__/
+*.egg-info/
 *.pyc
 .DS_Store
 ckpt.pt
@@ -16,3 +17,6 @@ p2_gnn_v2/graphs_cache.pt
 p3_screen_v2/stability.joblib
 # MatBench mp_gap 缓存（137MB 数据 + 特征，运行时重新生成）
 benchmark/_cache/
+
+# Personal interview preparation; intentionally kept out of the public repository.
+INTERVIEW_CARDS.md
